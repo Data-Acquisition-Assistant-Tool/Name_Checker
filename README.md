@@ -1,78 +1,151 @@
-# NameCheck 文件名比较工具
+# NameCheck - File Name Check Tool
 
-NameCheck是一个用于比较Excel文件和文件夹中文件名的工具，特别适用于检查测试文件的完整性。
+A comprehensive tool for comparing filenames between Excel files and folders, with batch renaming capabilities.
 
-## 功能特点
+## Features
 
-- 从Excel文件中提取符合特定格式的文件名
-- 检查文件夹中文件的完整性（每个测试号是否有足够的文件）
-- 比较Excel和文件夹中的文件名差异
-- 检测Excel中的重复文件名
-- 显示当前Excel文件中不同测试编号的数量
-- 支持为结果添加后缀
-- 支持复制结果为单行或保留换行格式
+### Core Comparison Features
+- Extract filenames matching specific patterns from Excel files
+- Check file completeness (each test number should have required number of files)
+- Compare filenames between Excel and folder
+- Detect duplicate filenames in Excel
+- Display count of different test numbers
+- Support for multiple Excel sheets
 
-## 项目结构
+### Batch Renaming Features
+- **Unified Suffix Renaming**: Batch rename files to use a unified suffix
+- **Smart Pattern Recognition**: Automatically detects date-based filename patterns (`20xx_xx_xx_xxxxxx`)
+- **Preserve Additional Suffixes**: Keeps `_inside`, `_outside`, etc. when renaming
+- **Preview Before Apply**: Preview all changes before executing
+- **Conflict Detection**: Identifies and reports naming conflicts
+- **Detailed Error Reporting**: Shows specific reasons for any failures
+
+### Result Management
+- Add suffixes to result filenames
+- Copy results with or without line breaks
+- Resizable result window with scrollbars
+- Undo changes functionality
+
+## Project Structure
 
 ```
 NameCheck/
 │
-├── src/                    # 源代码目录
-│   ├── __init__.py         # Python包标记文件
-│   ├── main.py             # 主程序入口
-│   ├── file_utils.py       # 文件处理相关功能
-│   ├── excel_utils.py      # Excel处理相关功能
-│   └── ui/                 # UI相关代码
-│       ├── __init__.py     # Python包标记文件
-│       ├── main_window.py  # 主窗口
-│       └── result_window.py # 结果窗口
+├── src/                    # Source code
+│   ├── main.py             # Main application entry
+│   ├── file_utils.py       # File processing utilities
+│   ├── excel_utils.py      # Excel processing utilities
+│   └── ui/                 # User interface
+│       ├── main_window.py  # Main window
+│       └── result_window.py # Result display window
 │
-├── config/                 # 配置文件目录
-│   └── settings.py         # 配置参数
+├── config/                 # Configuration
+│   └── settings.py         # Application settings
 │
-├── tests/                  # 测试代码目录
-│   └── __init__.py         # Python包标记文件
+├── archive/                # Archived files
+│   └── NameCheck_legacy.py # Original single-file version
 │
-├── README.md               # 项目说明文档
-└── namecheck.py            # 应用程序入口点
+├── tests/                  # Test files
+│   └── __init__.py
+│
+├── Namecheck.py            # Application launcher
+├── requirements.txt        # Dependencies
+├── build_detailed.py       # Build script
+├── build_exe.bat          # Build batch file
+├── 快速打包Namechecker.bat # Quick build script
+├── Namechecker_1.2.spec   # PyInstaller spec
+└── README.md              # This file
 ```
 
-## 使用方法
+## Installation
 
-1. 运行`namecheck.py`启动应用程序
-2. 选择Excel文件和要比较的文件夹
-3. 选择Excel中的sheet
-4. 点击"开始比较"按钮
-5. 查看比较结果，可以添加后缀或复制结果
+1. Clone or download the project
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## 开发环境
+## Usage
+
+### Running the Application
+```bash
+python Namecheck.py
+```
+
+### Basic File Comparison
+1. Select Excel file (.xlsx format)
+2. Choose sheet to compare
+3. Select folder to compare
+4. Click "Start Comparison"
+5. Review results in the popup window
+
+### Batch Renaming
+1. Select target folder
+2. Enter unified suffix (e.g., `H022295_E`)
+3. Click "Preview Rename" to see planned changes
+4. Click "Apply Rename" to execute changes
+
+### Filename Format
+The tool recognizes filenames with this pattern:
+- Format: `20xx_xx_xx_xxxxxx[_suffix][_additional]`
+- Examples:
+  - `2025_04_15_155131_DA00097_A.blf`
+  - `2025_04_15_155131_DA00097_A_inside.mp4`
+  - `2025_04_15_155131_DA00097_A_outside.mp4`
+
+### Renaming Examples
+- `2025_04_15_155131_DA00097_A.blf` → `2025_04_15_155131_H022295_E.blf`
+- `2025_04_15_155131_DA00097_A_inside.mp4` → `2025_04_15_155131_H022295_E_inside.mp4`
+- `2025_04_15_155131_DA00097_A_outside.mp4` → `2025_04_15_155131_H022295_E_outside.mp4`
+
+## Configuration
+
+Edit `config/settings.py` to modify:
+- Filename pattern matching
+- Minimum files required per test number
+- Window titles and dimensions
+
+## Building Executable
+
+### Quick Build
+```bash
+./快速打包Namechecker.bat
+```
+
+### Detailed Build
+```bash
+python build_detailed.py
+```
+
+## Dependencies
 
 - Python 3.6+
-- 依赖库：
-  - pandas
-  - tkinter
-  - tkinterdnd2 (可选，用于拖放功能)
+- pandas
+- openpyxl
+- tkinter (included with Python)
 
-## 自定义配置
+## Error Handling
 
-您可以在`config/settings.py`中修改以下配置：
-- 文件名匹配模式
-- 每个测试所需的最小文件数
-- 界面设置
+The tool provides detailed error reporting for rename operations:
+- **Target file already exists**: File naming conflicts
+- **Permission denied**: File in use or access issues
+- **Source file not found**: File moved or deleted
+- **Other errors**: Additional error details
 
-## 许可证
+## Version History
 
-[MIT License](LICENSE)
+- **v1.3**: Enhanced UI with resizable result window and improved error reporting
+- **v1.2**: Added batch renaming with unified suffix support
+- **v1.1**: Modular architecture with improved UI
+- **v1.0**: Basic file comparison functionality
 
-if pandas lib not exist, then
+## License
 
-```python
-pip install pandas
-```
+MIT License
 
-if Missing optional dependency "openpyxl". Use pip or conda to install openpyxl.
+## Notes
 
-```python
-pip install openpyxl
-```
-
+- Ensure Excel files are in .xlsx format
+- The tool only processes files matching the date pattern
+- Preview functionality helps avoid unintended changes
+- Original files are archived in the `archive/` directory
