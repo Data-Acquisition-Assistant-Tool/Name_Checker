@@ -4,7 +4,7 @@ Excel处理相关的工具函数
 
 import re
 import pandas as pd
-from typing import List, Tuple, Set
+from typing import List, Tuple, Set, Dict, Union
 
 from config.settings import FILENAME_PATTERN
 
@@ -82,4 +82,77 @@ def get_excel_sheets(file_path: str) -> List[str]:
     Returns:
         sheet名称列表
     """
-    return pd.ExcelFile(file_path).sheet_names 
+    return pd.ExcelFile(file_path).sheet_names
+
+def _column_letter_to_index(column_ref: str) -> int:
+    """
+    Convert Excel-style column letters (e.g., 'A', 'L') to zero-based indices.
+    """
+    if not column_ref or not column_ref.strip():
+        raise ValueError("Column reference cannot be empty")
+    ref = column_ref.strip().upper()
+    if not ref.isalpha():
+        raise ValueError(f"Invalid column reference: {column_ref}")
+    index = 0
+    for ch in ref:
+        index = index * 26 + (ord(ch) - ord('A') + 1)
+    return index - 1
+
+
+def _resolve_column(df: pd.DataFrame, column_ref: Union[str, int]):
+    """
+    Resolve pandas column using Excel column notation, integer index, or explicit column name.
+    """
+    if isinstance(column_ref, int):
+        return df.iloc[:, column_ref]
+    if isinstance(column_ref, str):
+        stripped = column_ref.strip()
+        if stripped.upper().isalpha():
+            idx = _column_letter_to_index(stripped)
+            if idx >= len(df.columns):
+                raise ValueError(f"Sheet does not contain column {column_ref}")
+            return df.iloc[:, idx]
+        if stripped in df.columns:
+            return df[stripped]
+    raise ValueError(f"Unsupported column reference: {column_ref}")
+
+
+def _normalize_group_value(value) -> str:
+    """
+    Normalize numeric/text cell values so they can be used as folder names.
+    """
+    if pd.isna(value):
+        return ""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if float(value).is_integer():
+            return str(int(value))
+        return str(value).strip()
+    return str(value).strip()
+
+
+def build_group_mapping_from_excel(df: pd.DataFrame, group_column="L", names_column="M"):
+    """
+    Build mapping between filenames (column M) and group labels (column L).
+
+    Returns:
+        (filename_to_group, group_to_names)
+    """
+    filename_to_group: Dict[str, str] = {}
+    group_to_names: Dict[str, Set[str]] = {}
+    group_series = _resolve_column(df, group_column)
+    names_series = _resolve_column(df, names_column)
+    for group_value, names_cell in zip(group_series, names_series):
+        label = _normalize_group_value(group_value)
+        if not label:
+            continue
+        filenames = split_filenames(names_cell)
+        cleaned = [s.strip() for s in filenames if isinstance(s, str) and s.strip()]
+        if not cleaned:
+            continue
+        for name in cleaned:
+            filename_to_group[name] = label
+            group_to_names.setdefault(label, set()).add(name)
+    if not filename_to_group:
+        raise ValueError("No filenames found in the specified Excel columns")
+    return filename_to_group, group_to_names
+

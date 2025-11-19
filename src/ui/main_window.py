@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 import os
+import shutil
 
 from config.settings import WINDOW_TITLE
 from src.file_utils import (
@@ -15,7 +16,11 @@ from src.file_utils import (
     build_suffix_rename_plan,
     apply_rename_plan,
 )
-from src.excel_utils import get_excel_sheets, scan_excel_for_filenames
+from src.excel_utils import (
+    get_excel_sheets,
+    scan_excel_for_filenames,
+    build_group_mapping_from_excel,
+)
 from src.ui.result_window import ResultWindow
 
 class MainWindow:
@@ -71,6 +76,11 @@ class MainWindow:
         btn_frame.grid(row=6, column=1, pady=10)
         tk.Button(btn_frame, text="Preview Rename", command=self.preview_rename).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Apply Rename", command=self.execute_rename).pack(side=tk.LEFT, padx=5)
+
+        # Excel-driven grouping
+        ttk.Separator(self.root, orient='horizontal').grid(row=7, column=0, columnspan=3, sticky='ew', padx=10, pady=(5, 5))
+        tk.Label(self.root, text="Group files by Excel column L value:").grid(row=8, column=0, padx=10, pady=5, sticky='w')
+        tk.Button(self.root, text="Group Files", command=self.group_files_by_excel).grid(row=8, column=1, padx=10, pady=5, sticky='w')
     
     def select_excel_file(self):
         """
@@ -271,3 +281,137 @@ class MainWindow:
                 messagebox.showinfo("Done", message)
         except Exception as e:
             messagebox.showerror("Error", f"Apply failed: {str(e)}")
+
+    def _match_excel_prefix(self, file_stem: str, sorted_names):
+        """
+        Return the Excel entry whose prefix matches the given filename stem.
+        """
+        stem = file_stem.strip().lower()
+        for candidate in sorted_names:
+            if stem.startswith(candidate.lower()):
+                return candidate
+        return None
+
+    def group_files_by_excel(self):
+        """
+        Group folder files into subfolders using Excel column L values.
+        """
+        excel_file_path = self.excel_path_var.get()
+        folder_path = self.folder_path_var.get()
+        selected_sheet = self.sheet_var.get()
+
+        if not excel_file_path or not folder_path:
+            messagebox.showerror("Error", "Please select Excel file and folder again")
+            return
+
+        try:
+            df = pd.read_excel(excel_file_path, sheet_name=selected_sheet)
+        except Exception as e:
+            messagebox.showerror("Error", f"Cannot read Excel file: {str(e)}")
+            return
+
+        try:
+            filename_to_group, _ = build_group_mapping_from_excel(df, "L", "M")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to parse column L/M: {str(e)}")
+            return
+
+        folder_entries = get_folder_files(folder_path)
+        sorted_names = sorted(filename_to_group.keys(), key=len, reverse=True)
+        plan = []
+        unmatched_files = []
+        missing_excel = set(filename_to_group.keys())
+        for entry in folder_entries:
+            full_path = os.path.join(folder_path, entry)
+            if os.path.isdir(full_path):
+                continue
+            stem = os.path.splitext(entry)[0]
+            matched = self._match_excel_prefix(stem, sorted_names)
+            if not matched:
+                unmatched_files.append(entry)
+                continue
+            group_value = filename_to_group[matched]
+            target_dir = os.path.join(folder_path, group_value)
+            dest_path = os.path.join(target_dir, entry)
+            plan.append((full_path, dest_path, entry, group_value, target_dir, matched))
+            missing_excel.discard(matched)
+
+        if not plan:
+            messagebox.showinfo("Info", "No files match the Excel filenames in this folder.")
+            return
+
+        if not messagebox.askyesno("Confirm", f"Move {len(plan)} files into folders named after column L values?"):
+            return
+
+        moved = []
+        conflicts = []
+        errors = []
+        created_dirs = set()
+        for src, dest, entry, group_value, target_dir, _ in plan:
+            os.makedirs(target_dir, exist_ok=True)
+            if os.path.exists(dest):
+                conflicts.append(f"{entry} (target {group_value})")
+                continue
+            try:
+                shutil.move(src, dest)
+                moved.append((entry, group_value))
+                created_dirs.add(group_value)
+            except Exception as exc:
+                errors.append((entry, group_value, str(exc)))
+
+        missing_by_group = {}
+        for name in missing_excel:
+            group_value = filename_to_group[name]
+            missing_by_group.setdefault(group_value, 0)
+            missing_by_group[group_value] += 1
+
+        lines = [
+            f"Excel sheet: {selected_sheet or '(default)'}",
+            f"Files moved: {len(moved)}",
+            f"Target folders created: {len(created_dirs)}",
+            f"Conflicts (already in place): {len(conflicts)}",
+            f"Errors while moving: {len(errors)}",
+            f"Files skipped (not in Excel): {len(unmatched_files)}",
+        ]
+
+        if moved:
+            lines.append("")
+            lines.append("Moved files (first 50):")
+            for entry, group_value in moved[:50]:
+                lines.append(f"- {entry} -> {group_value}/")
+            if len(moved) > 50:
+                lines.append(f"... and {len(moved) - 50} more")
+
+        if conflicts:
+            lines.append("")
+            lines.append("Conflicts:")
+            for item in conflicts[:30]:
+                lines.append(f"- {item}")
+            if len(conflicts) > 30:
+                lines.append(f"... and {len(conflicts) - 30} more")
+
+        if errors:
+            lines.append("")
+            lines.append("Move errors:")
+            for entry, group_value, err in errors[:30]:
+                lines.append(f"- {entry} -> {group_value}: {err}")
+            if len(errors) > 30:
+                lines.append(f"... and {len(errors) - 30} more")
+
+        if missing_by_group:
+            lines.append("")
+            lines.append("Excel entries without files in folder:")
+            for group_value, count in list(missing_by_group.items())[:30]:
+                lines.append(f"- {group_value}: {count} names not found")
+            if len(missing_by_group) > 30:
+                lines.append(f"... and {len(missing_by_group) - 30} more groups")
+
+        if unmatched_files:
+            lines.append("")
+            lines.append("Files left in root folder (first 30):")
+            for entry in unmatched_files[:30]:
+                lines.append(f"- {entry}")
+            if len(unmatched_files) > 30:
+                lines.append(f"... and {len(unmatched_files) - 30} more")
+
+        ResultWindow(self.root, "\n".join(lines))
