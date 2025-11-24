@@ -47,37 +47,29 @@ def extract_folder_filename_bases(folder_filenames: List[str]) -> Set[str]:
     """
     return set([extract_filename_base(f) for f in folder_filenames if extract_filename_base(f)])
 
-def check_file_completeness(folder_path: str, folder_filenames: List[str]) -> List[str]:
+def check_file_completeness(
+    folder_path: str,
+    folder_filenames: List[str],
+    required_files: int = FILES_PER_TEST,
+) -> List[str]:
     """
-    检查每个测试编号是否有完整的文件集合
-    
-    Args:
-        folder_path: 文件夹路径
-        folder_filenames: 文件夹中的文件列表
-        
-    Returns:
-        不完整的测试编号列表
+    Check whether each test number has the required count of files.
     """
-    # 按测试编号分组文件
+    if required_files <= 0:
+        raise ValueError("required_files must be a positive integer")
+
     files_by_number = {}
-    
-    # 将文件按其基本编号分组
     for filename in folder_filenames:
-        # 使用extract_filename_base函数获取完整的日期-编号字符串
         base_name = extract_filename_base(filename)
         if base_name:
-            # 使用完整的日期-编号字符串作为键
-            if base_name not in files_by_number:
-                files_by_number[base_name] = set()
-            files_by_number[base_name].add(filename)
-    
-    # 检查每个编号的完整性
+            files_by_number.setdefault(base_name, set()).add(filename)
+
     incomplete_numbers = []
     for number, files in files_by_number.items():
-        if len(files) < FILES_PER_TEST:  # 如果文件数小于FILES_PER_TEST，则不完整
+        if len(files) < required_files:
             incomplete_numbers.append(number)
-    
-    return incomplete_numbers 
+
+    return incomplete_numbers
 
 def build_suffix_rename_plan(folder_path: str, new_suffix: str) -> Tuple[List[Tuple[str, str]], List[str], List[Tuple[str, str]]]:
     """

@@ -8,7 +8,7 @@ import pandas as pd
 import os
 import shutil
 
-from config.settings import WINDOW_TITLE
+from config.settings import WINDOW_TITLE, FILES_PER_TEST
 from src.file_utils import (
     get_folder_files,
     extract_folder_filename_bases,
@@ -43,6 +43,7 @@ class MainWindow:
         self.sheet_var = tk.StringVar()
         # Unified suffix input
         self.rename_suffix_var = tk.StringVar()
+        self.files_per_test_var = tk.StringVar(value=str(FILES_PER_TEST))
         
         self.setup_ui()
     
@@ -65,22 +66,26 @@ class MainWindow:
         tk.Entry(self.root, textvariable=self.folder_path_var, width=50).grid(row=2, column=1, padx=10, pady=10)
         tk.Button(self.root, text="Browse", command=self.select_folder).grid(row=2, column=2, padx=10, pady=10)
         
+        # Files per test input
+        tk.Label(self.root, text="File number per Test:").grid(row=3, column=0, padx=10, pady=5)
+        tk.Entry(self.root, textvariable=self.files_per_test_var, width=10).grid(row=3, column=1, padx=10, pady=5, sticky='w')
+
         # Start comparison button
-        tk.Button(self.root, text="Start Comparison", command=self.compare_files).grid(row=3, column=1, padx=10, pady=10)
+        tk.Button(self.root, text="Start Comparison", command=self.compare_files).grid(row=4, column=1, padx=10, pady=10)
 
         # Unified suffix - input and buttons
-        ttk.Separator(self.root, orient='horizontal').grid(row=4, column=0, columnspan=3, sticky='ew', padx=10, pady=(5,5))
-        tk.Label(self.root, text="Unified Suffix:").grid(row=5, column=0, padx=10, pady=5)
-        tk.Entry(self.root, textvariable=self.rename_suffix_var, width=20).grid(row=5, column=1, padx=10, pady=5, sticky='w')
+        ttk.Separator(self.root, orient='horizontal').grid(row=5, column=0, columnspan=3, sticky='ew', padx=10, pady=(5,5))
+        tk.Label(self.root, text="Unified Suffix:").grid(row=6, column=0, padx=10, pady=5)
+        tk.Entry(self.root, textvariable=self.rename_suffix_var, width=20).grid(row=6, column=1, padx=10, pady=5, sticky='w')
         btn_frame = tk.Frame(self.root)
-        btn_frame.grid(row=6, column=1, pady=10)
+        btn_frame.grid(row=7, column=1, pady=10)
         tk.Button(btn_frame, text="Preview Rename", command=self.preview_rename).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="Apply Rename", command=self.execute_rename).pack(side=tk.LEFT, padx=5)
 
         # Excel-driven grouping
-        ttk.Separator(self.root, orient='horizontal').grid(row=7, column=0, columnspan=3, sticky='ew', padx=10, pady=(5, 5))
-        tk.Label(self.root, text="Group files by Excel column L value:").grid(row=8, column=0, padx=10, pady=5, sticky='w')
-        tk.Button(self.root, text="Group Files", command=self.group_files_by_excel).grid(row=8, column=1, padx=10, pady=5, sticky='w')
+        ttk.Separator(self.root, orient='horizontal').grid(row=8, column=0, columnspan=3, sticky='ew', padx=10, pady=(5, 5))
+        tk.Label(self.root, text="Group files by Excel column L value:").grid(row=9, column=0, padx=10, pady=5, sticky='w')
+        tk.Button(self.root, text="Group Files", command=self.group_files_by_excel).grid(row=9, column=1, padx=10, pady=5, sticky='w')
     
     def select_excel_file(self):
         """
@@ -118,6 +123,10 @@ class MainWindow:
             messagebox.showerror("Error", "Please select Excel file and folder again")
             return
         
+        files_per_test = self._get_files_per_test()
+        if not files_per_test:
+            return
+
         try:
             # Read selected Excel sheet
             df = pd.read_excel(excel_file_path, sheet_name=selected_sheet)
@@ -136,7 +145,11 @@ class MainWindow:
             folder_not_in_excel = [f for f in folder_filenames_base if f not in excel_filenames.values]
             
             # Check file completeness
-            incomplete_files = check_file_completeness(folder_path, folder_filenames)
+            incomplete_files = check_file_completeness(
+                folder_path,
+                folder_filenames,
+                required_files=files_per_test,
+            )
             
             result = ""
             has_issues = False
@@ -160,7 +173,7 @@ class MainWindow:
             # Add incomplete file information
             if incomplete_files:
                 has_issues = True
-                result += "Incomplete file numbers (less than 4 files):\n"
+                result += f"Incomplete file numbers (less than {files_per_test} files):\n"
                 result += ", ".join(incomplete_files) + "\n\n"
             
             # Add duplicate file information
@@ -190,6 +203,24 @@ class MainWindow:
             messagebox.showerror("Error", "Please select a folder first")
             return ""
         return folder_path
+
+    def _get_files_per_test(self) -> int:
+        """
+        Validate and return desired files-per-test count.
+        """
+        raw_value = self.files_per_test_var.get().strip()
+        if not raw_value:
+            messagebox.showerror("Error", "Please enter the required number of files per test")
+            return 0
+        try:
+            number = int(raw_value)
+        except ValueError:
+            messagebox.showerror("Error", "Files per test must be an integer value")
+            return 0
+        if number <= 0:
+            messagebox.showerror("Error", "Files per test must be greater than 0")
+            return 0
+        return number
 
     def preview_rename(self):
         """
