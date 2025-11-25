@@ -15,6 +15,7 @@ from src.file_utils import (
     check_file_completeness,
     build_suffix_rename_plan,
     apply_rename_plan,
+    build_files_by_base_map,
 )
 from src.excel_utils import (
     get_excel_sheets,
@@ -72,6 +73,11 @@ class MainWindow:
 
         # Start comparison button
         tk.Button(self.root, text="Start Comparison", command=self.compare_files).grid(row=4, column=1, padx=10, pady=10)
+        tk.Button(
+            self.root,
+            text="Delete Folder-only Tests",
+            command=self.delete_folder_only_tests,
+        ).grid(row=4, column=2, padx=10, pady=10)
 
         # Unified suffix - input and buttons
         ttk.Separator(self.root, orient='horizontal').grid(row=5, column=0, columnspan=3, sticky='ew', padx=10, pady=(5,5))
@@ -195,7 +201,95 @@ class MainWindow:
             ResultWindow(self.root, result)
             
         except Exception as e:
-            messagebox.showerror("Error", f"An error occurred: {str(e)}") 
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    def delete_folder_only_tests(self):
+        """
+        Delete all files for tests present in folder but not in Excel.
+        """
+        excel_file_path = self.excel_path_var.get()
+        folder_path = self.folder_path_var.get()
+        selected_sheet = self.sheet_var.get()
+
+        if not excel_file_path or not folder_path:
+            messagebox.showerror("Error", "Please select Excel file and folder again")
+            return
+
+        try:
+            df = pd.read_excel(excel_file_path, sheet_name=selected_sheet)
+        except Exception as e:
+            messagebox.showerror("Error", f"Cannot read Excel file: {str(e)}")
+            return
+
+        try:
+            excel_filenames, _, _ = scan_excel_for_filenames(df)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to scan Excel: {str(e)}")
+            return
+
+        folder_filenames = get_folder_files(folder_path)
+        folder_filenames_base = extract_folder_filename_bases(folder_filenames)
+
+        excel_set = set(excel_filenames.values)
+        folder_only_bases = sorted([f for f in folder_filenames_base if f not in excel_set])
+
+        if not folder_only_bases:
+            messagebox.showinfo("Info", "No folder-only tests detected.")
+            return
+
+        files_map = build_files_by_base_map(folder_path, folder_filenames)
+        per_base_counts = {base: len(files_map.get(base, [])) for base in folder_only_bases}
+        total_files = sum(per_base_counts.values())
+
+        if total_files == 0:
+            messagebox.showinfo("Info", "No matching files found to delete.")
+            return
+
+        preview_lines = []
+        preview_lines.append(f"Detected {len(folder_only_bases)} tests not present in Excel.")
+        preview_lines.append(f"This will delete {total_files} files from folder:")
+        for base in folder_only_bases[:30]:
+            preview_lines.append(f"- {base}: {per_base_counts.get(base, 0)} files")
+        if len(folder_only_bases) > 30:
+            preview_lines.append(f"... and {len(folder_only_bases) - 30} more tests")
+        preview_lines.append("")
+        preview_lines.append("Proceed with deletion?")
+
+        if not messagebox.askyesno("Confirm Delete", "\n".join(preview_lines)):
+            return
+
+        deleted = []
+        failed = []
+        for base in folder_only_bases:
+            for file_path in files_map.get(base, []):
+                try:
+                    os.remove(file_path)
+                    deleted.append(file_path)
+                except Exception as exc:
+                    failed.append((file_path, str(exc)))
+
+        lines = [
+            f"Deleted tests: {len(folder_only_bases)}",
+            f"Files deleted: {len(deleted)}",
+            f"Failures: {len(failed)}",
+        ]
+        if deleted:
+            lines.append("")
+            lines.append("Deleted files (first 50):")
+            for file_path in deleted[:50]:
+                lines.append(f"- {os.path.basename(file_path)}")
+            if len(deleted) > 50:
+                lines.append(f"... and {len(deleted) - 50} more")
+
+        if failed:
+            lines.append("")
+            lines.append("Failures:")
+            for file_path, err in failed[:30]:
+                lines.append(f"- {os.path.basename(file_path)}: {err}")
+            if len(failed) > 30:
+                lines.append(f"... and {len(failed) - 30} more")
+
+        ResultWindow(self.root, "\n".join(lines))
 
     def _require_folder_selected(self) -> str:
         folder_path = self.folder_path_var.get()

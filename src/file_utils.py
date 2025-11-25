@@ -71,6 +71,22 @@ def check_file_completeness(
 
     return incomplete_numbers
 
+
+def build_files_by_base_map(
+    folder_path: str,
+    folder_filenames: List[str],
+) -> Dict[str, List[str]]:
+    """
+    Return mapping from filename base to absolute file paths within the folder.
+    """
+    files_map: Dict[str, List[str]] = {}
+    for name in folder_filenames:
+        base = extract_filename_base(name)
+        if not base:
+            continue
+        files_map.setdefault(base, []).append(os.path.join(folder_path, name))
+    return files_map
+
 def build_suffix_rename_plan(folder_path: str, new_suffix: str) -> Tuple[List[Tuple[str, str]], List[str], List[Tuple[str, str]]]:
     """
     基于文件名模式，生成“统一后缀”的重命名计划。
