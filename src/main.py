@@ -28,7 +28,7 @@ def main():
     if platform.system() == 'Windows':
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('Namechecker.1.41')
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('Namechecker.1.5')
         except Exception:
             pass
 

@@ -42,6 +42,7 @@ class MainWindow:
         self.excel_path_var = tk.StringVar()
         self.folder_path_var = tk.StringVar()
         self.sheet_var = tk.StringVar()
+        self.group_column_var = tk.StringVar(value="L")
         # Unified suffix input
         self.rename_suffix_var = tk.StringVar()
         self.files_per_test_var = tk.StringVar(value=str(FILES_PER_TEST))
@@ -90,8 +91,9 @@ class MainWindow:
 
         # Excel-driven grouping
         ttk.Separator(self.root, orient='horizontal').grid(row=8, column=0, columnspan=3, sticky='ew', padx=10, pady=(5, 5))
-        tk.Label(self.root, text="Group files by Excel column L value:").grid(row=9, column=0, padx=10, pady=5, sticky='w')
-        tk.Button(self.root, text="Group Files", command=self.group_files_by_excel).grid(row=9, column=1, padx=10, pady=5, sticky='w')
+        tk.Label(self.root, text="Group files by Excel column:").grid(row=9, column=0, padx=10, pady=5, sticky='w')
+        tk.Entry(self.root, textvariable=self.group_column_var, width=6).grid(row=9, column=1, padx=10, pady=5, sticky='w')
+        tk.Button(self.root, text="Group Files", command=self.group_files_by_excel).grid(row=9, column=2, padx=10, pady=5, sticky='w')
     
     def select_excel_file(self):
         """
@@ -419,11 +421,12 @@ class MainWindow:
 
     def group_files_by_excel(self):
         """
-        Group folder files into subfolders using Excel column L values.
+        Group folder files into subfolders using Excel column values (default L).
         """
         excel_file_path = self.excel_path_var.get()
         folder_path = self.folder_path_var.get()
         selected_sheet = self.sheet_var.get()
+        group_column = (self.group_column_var.get() or "L").strip() or "L"
 
         if not excel_file_path or not folder_path:
             messagebox.showerror("Error", "Please select Excel file and folder again")
@@ -436,9 +439,9 @@ class MainWindow:
             return
 
         try:
-            filename_to_group, _ = build_group_mapping_from_excel(df, "L", "M")
+            filename_to_group, _ = build_group_mapping_from_excel(df, group_column, "M")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to parse column L/M: {str(e)}")
+            messagebox.showerror("Error", f"Failed to parse column {group_column or 'L'}/M: {str(e)}")
             return
 
         folder_entries = get_folder_files(folder_path)
@@ -465,7 +468,7 @@ class MainWindow:
             messagebox.showinfo("Info", "No files match the Excel filenames in this folder.")
             return
 
-        if not messagebox.askyesno("Confirm", f"Move {len(plan)} files into folders named after column L values?"):
+        if not messagebox.askyesno("Confirm", f"Move {len(plan)} files into folders named after column {group_column} values?"):
             return
 
         moved = []
@@ -492,6 +495,7 @@ class MainWindow:
 
         lines = [
             f"Excel sheet: {selected_sheet or '(default)'}",
+            f"Group column: {group_column}",
             f"Files moved: {len(moved)}",
             f"Target folders created: {len(created_dirs)}",
             f"Conflicts (already in place): {len(conflicts)}",
